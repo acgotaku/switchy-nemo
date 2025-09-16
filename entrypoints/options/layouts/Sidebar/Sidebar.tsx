@@ -44,6 +44,8 @@ const Sidebar = observer(() => {
       host: 'example.com',
       scheme: 'http',
       port: 80,
+      username: '',
+      password: '',
       bypassList: BYPASS_LIST
     });
     setShowAddProfile(true);

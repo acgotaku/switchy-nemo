@@ -172,7 +172,11 @@ const FormItem = forwardRef<IFormItemRef, IFormItemProps>((props, ref) => {
     (event: React.ChangeEvent<HTMLInputElement>) => {
       if (field) {
         const value = event.target.value;
-        const newValues = setProp(values, field, value);
+        const newValues = setProp(
+          values,
+          field,
+          event.target.type === 'number' ? Number(value) : value
+        );
         changeHandler(newValues);
       }
     },
@@ -268,7 +272,7 @@ const FormItem = forwardRef<IFormItemRef, IFormItemProps>((props, ref) => {
           const child = children as React.ReactElement<ChildProps>;
           return React.cloneElement(child as React.ReactElement<ChildProps>, {
             value: fieldValue,
-            invalid: !!errorMessage,
+            // invalid: !!errorMessage,
             disabled: disableState || child.props.disabled,
             onSelect: selectHandler
           });

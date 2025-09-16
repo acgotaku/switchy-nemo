@@ -50,6 +50,8 @@ export default {
       scheme: 'スキーム',
       host: 'サーバー',
       port: 'ポート',
+      username: 'ユーザー名',
+      password: 'パスワード',
       bypassList: 'バイパスリスト',
       bypassListDesc: 'プロキシを使用したくないサーバー: (各行に1つのサーバー)',
       bypassListLink: '(ワイルドカードなどが利用可能です…)'

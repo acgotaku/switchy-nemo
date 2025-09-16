@@ -29,6 +29,8 @@ export type Profile = {
   scheme?: Scheme;
   host: string;
   port?: number;
+  username?: string;
+  password?: string;
   bypassList?: string[];
 };
 

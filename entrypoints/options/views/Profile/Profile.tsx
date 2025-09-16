@@ -232,7 +232,13 @@ const ProfileView = observer(() => {
                   <Input />
                 </Form.Item>
                 <Form.Item label={t('views.profile.port')} field="port">
+                  <Input type="number" />
+                </Form.Item>
+                <Form.Item label={t('views.profile.username')} field="username">
                   <Input />
+                </Form.Item>
+                <Form.Item label={t('views.profile.password')} field="password">
+                  <Input type="password" />
                 </Form.Item>
               </Form>
             </div>

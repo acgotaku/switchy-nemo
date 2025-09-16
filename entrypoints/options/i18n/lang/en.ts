@@ -50,6 +50,8 @@ export default {
       scheme: 'Scheme',
       host: 'Server',
       port: 'Port',
+      username: 'Username',
+      password: 'Password',
       bypassList: 'Bypass List',
       bypassListDesc:
         'Servers for which you do not want to use any proxy: (One server on each line.)',

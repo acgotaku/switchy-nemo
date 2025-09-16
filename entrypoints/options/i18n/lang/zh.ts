@@ -49,6 +49,8 @@ export default {
       scheme: '协议',
       host: '服务器',
       port: '端口',
+      username: '用户名',
+      password: '密码',
       bypassList: '绕过列表',
       bypassListDesc: '不想使用代理的服务器: (每行一个服务器)',
       bypassListLink: '(支持通配符等…)'

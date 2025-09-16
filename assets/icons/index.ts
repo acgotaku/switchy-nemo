@@ -9,3 +9,5 @@ export { default as Error } from './error.svg?react';
 export { default as Info } from './info.svg?react';
 export { default as Success } from './success.svg?react';
 export { default as Warning } from './warning.svg?react';
+export { default as Eye } from './eye.svg?react';
+export { default as EyeOff } from './eye-off.svg?react';

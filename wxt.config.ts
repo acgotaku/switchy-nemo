@@ -24,7 +24,13 @@ export default defineConfig({
       version: version,
       description: '__MSG_description__',
       default_locale: 'en',
-      permissions: ['activeTab', 'storage', 'proxy', 'webRequest'],
+      permissions: [
+        'activeTab',
+        'storage',
+        'proxy',
+        'webRequest',
+        'webRequestAuthProvider'
+      ],
       web_accessible_resources: [],
       action: {
         default_icon: {
@@ -35,7 +41,7 @@ export default defineConfig({
           '128': 'icon/nemo128.png'
         }
       },
-      host_permissions: ['https://*/*', 'http://*/*']
+      host_permissions: ['<all_urls>']
     };
     return manifest;
   },

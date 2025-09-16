@@ -25,6 +25,8 @@ type Config = {
 };
 
 export default defineBackground(() => {
+  let username = '';
+  let password = '';
   browser.runtime.onMessage.addListener(
     (message: Message, sender, sendResponse) => {
       switch (message.type) {
@@ -58,6 +60,8 @@ export default defineBackground(() => {
               },
               bypassList: selectedProfile.bypassList || []
             };
+            username = selectedProfile.username || '';
+            password = selectedProfile.password || '';
           }
 
           browser.proxy.settings
@@ -75,5 +79,18 @@ export default defineBackground(() => {
         }
       }
     }
+  );
+
+  browser.webRequest.onAuthRequired.addListener(
+    () => {
+      return {
+        authCredentials: {
+          username: username,
+          password: password
+        }
+      };
+    },
+    { urls: ['<all_urls>'] },
+    ['blocking']
   );
 });
