@@ -12,6 +12,7 @@ function render() {
 }
 
 // browser.storage is async, so the store has to be loaded before the first
-// render. hydrate() absorbs its own failures — the UI still comes up, and the
-// store stays read-only rather than saving defaults over the real settings.
+// render. hydrate() absorbs its own failures — the UI still comes up, and a
+// store that failed to load stops persisting rather than saving the defaults
+// it is holding over the real settings.
 profiles.hydrate().then(render);

@@ -50,8 +50,10 @@ export class ProfilesStore {
    * browser.storage is async, so the store starts empty and has to be filled in
    * before the first render. Entry points await this.
    *
-   * Never rejects: a storage failure leaves the store unhydrated and read-only
-   * rather than taking the whole page down with it.
+   * Never rejects. A storage failure leaves the store unhydrated: the UI still
+   * comes up and edits still apply in memory, but nothing is written back, so
+   * the defaults it is holding cannot land on top of the real settings. Those
+   * edits are lost on reload — surfacing the failure is left to the caller.
    */
   async hydrate() {
     try {
