@@ -1,14 +1,12 @@
 import type { Profile, ProxyMode } from '@options/stores/modules/profiles';
 
 export const MessageType = {
-  SaveProfile: 'saveProfile',
   SetProxy: 'setProxy'
 } as const;
 export type MessageType = (typeof MessageType)[keyof typeof MessageType];
 
 export type Message = {
   type: MessageType;
-  profiles?: Profile[];
   currentMode?: ProxyMode;
   selectedProfile?: Profile | null;
 };
