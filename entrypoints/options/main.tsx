@@ -12,6 +12,7 @@ function render() {
 }
 
 // browser.storage is async, so the store has to be loaded before the first
-// render. `finally` keeps a storage failure from leaving a blank page: the UI
-// still comes up, just empty.
-profiles.hydrate().finally(render);
+// render. hydrate() absorbs its own failures — the UI still comes up, and a
+// store that failed to load stops persisting rather than saving the defaults
+// it is holding over the real settings.
+profiles.hydrate().then(render);
