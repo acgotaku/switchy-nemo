@@ -13,9 +13,15 @@ import {
   Select
 } from '@/components';
 import { Edit } from '@/assets/icons';
-import { BYPASS_LIST } from '@/utils/misc';
+import { BYPASS_LIST, looseEqual } from '@/utils/misc';
 import { useStore, Profile } from '@options/stores';
 import styles from './profile.module.css';
+
+const parseBypassList = (value: string) =>
+  value
+    .split('\n')
+    .map(item => item.trim())
+    .filter(item => item.length > 0);
 
 const ProfileView = observer(() => {
   const { id } = useParams();
@@ -69,6 +75,19 @@ const ProfileView = observer(() => {
     [currentProfile, profiles]
   );
 
+  // The bypass list section has no submit button of its own, so it commits on
+  // blur. Saving per keystroke would rewrite storage and re-apply the proxy on
+  // every character typed — the bypass list is part of the proxy rules.
+  const saveBypassList = useCallback(
+    (value: string) => {
+      if (!profile) return;
+      const list = parseBypassList(value);
+      if (looseEqual(list, profile.bypassList ?? [])) return;
+      profiles.updateProfile({ ...profile, bypassList: list });
+    },
+    [profile, profiles]
+  );
+
   const deleteProfile = useCallback(() => {
     if (profile) {
       profiles.removeProfile(profile);
@@ -115,19 +134,11 @@ const ProfileView = observer(() => {
   ];
 
   useEffect(() => {
-    if (bypassList) {
-      const list = bypassList.split('\n').map(item => item.trim());
-      setCurrentProfile(prevProfile => ({
-        ...prevProfile,
-        bypassList: list.filter(item => item.length > 0)
-      }));
-    }
-  }, [bypassList]);
-
-  useEffect(() => {
     if (profile) {
       setCurrentProfile(profile);
-      setBypassList(profile?.bypassList?.join('\n') || BYPASS_LIST.join('\n'));
+      // `??` rather than `||`: an empty bypass list is a deliberate choice and
+      // must not be silently swapped back to the defaults.
+      setBypassList((profile.bypassList ?? BYPASS_LIST).join('\n'));
     }
   }, [profile]);
 
@@ -259,6 +270,7 @@ const ProfileView = observer(() => {
             className={styles.sectionTextarea}
             value={bypassList}
             onChange={e => setBypassList(e.target.value)}
+            onBlur={e => saveBypassList(e.target.value)}
           />
         </div>
       </section>
