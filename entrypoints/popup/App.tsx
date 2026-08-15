@@ -5,7 +5,7 @@ import { observer } from 'mobx-react-lite';
 import { profiles } from '@options/stores';
 import profileIcon from '@/assets/nemo.svg?inline';
 import { Profile, ProxyMode } from '@options/stores/modules/profiles';
-import { Message } from '@/entrypoints/background';
+import { setProxy } from '@/utils/proxy';
 import styles from './app.module.css';
 
 function setIcon(id: string) {
@@ -39,20 +39,31 @@ const App = observer(() => {
     ];
   }, [t]);
 
-  const sendMessage = useCallback((message: Message) => {
-    browser.runtime.sendMessage(message).then(response => {
-      if (response?.success) {
-        browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-          if (tabs.length > 0) {
-            const tabId = tabs[0].id;
-            if (tabId) {
-              browser.tabs.reload(tabId);
-            }
-          }
-        });
-        window.close();
-      }
-    });
+  const applyProxy = useCallback((mode: ProxyMode, profile: Profile | null) => {
+    setProxy(mode, profile)
+      .then(response => {
+        if (response?.success) {
+          browser.tabs
+            .query({ active: true, currentWindow: true })
+            .then(tabs => {
+              if (tabs.length > 0) {
+                const tabId = tabs[0].id;
+                if (tabId) {
+                  browser.tabs.reload(tabId);
+                }
+              }
+            })
+            .catch(error => {
+              console.error('Error reloading the active tab:', error);
+            });
+          window.close();
+        }
+      })
+      .catch(error => {
+        // The popup is gone once it closes, so an unhandled rejection here
+        // would leave a silently dead click with nothing to inspect.
+        console.error('Error applying proxy:', error);
+      });
   }, []);
 
   const selectMode = useCallback(
@@ -60,30 +71,22 @@ const App = observer(() => {
       profiles.setCurrentMode(mode);
       profiles.selectProfile(null);
 
-      sendMessage({
-        type: 'setProxy',
-        currentMode: mode,
-        selectedProfile: null
-      });
+      applyProxy(mode, null);
 
       setIcon(mode);
     },
-    [sendMessage]
+    [applyProxy]
   );
 
   const selectProfile = useCallback(
     (profile: Profile) => {
       profiles.selectProfile(profile);
 
-      sendMessage({
-        type: 'setProxy',
-        currentMode: ProxyMode.FixedServers,
-        selectedProfile: profile
-      });
+      applyProxy(ProxyMode.FixedServers, profile);
 
       setIcon(profile.id);
     },
-    [sendMessage]
+    [applyProxy]
   );
 
   return (

@@ -1,5 +1,6 @@
 import { action, computed, observable, toJS } from 'mobx';
-import { namespace } from '@/utils/misc';
+import { looseEqual, namespace } from '@/utils/misc';
+import { setProxy } from '@/utils/proxy';
 
 export const PROFILES = `${namespace}.profiles`;
 export const SELECTED_PROFILE = `${namespace}.selectedProfile`;
@@ -47,10 +48,52 @@ export class ProfilesStore {
     ? (localStorage.getItem(PROXY_MODE) as ProxyMode)
     : 'direct';
 
+  /**
+   * The background worker keeps its own copy of the active profile — including
+   * the credentials it answers proxy auth challenges with — so any edit to the
+   * profile currently routing traffic has to be pushed through to it. Without
+   * this the user has to re-pick the profile in the popup for a changed host or
+   * password to take effect.
+   */
+  private syncProxy() {
+    const profile =
+      this.currentMode === ProxyMode.FixedServers
+        ? toJS(this.selectedProfile)
+        : null;
+    setProxy(this.currentMode, profile).catch(error => {
+      console.error('Error syncing proxy:', error);
+    });
+  }
+
+  /**
+   * Re-checks the cached selection against the profile list after a mutation,
+   * and re-applies the proxy when the active profile changed or disappeared.
+   */
+  private reconcileSelection() {
+    const selected = this.selectedProfile;
+    if (!selected) return;
+
+    const current = this.profiles.find(profile => profile.id === selected.id);
+    if (!current) {
+      // The active profile was deleted or replaced by a restore: tear the proxy
+      // down so its credentials stop being offered.
+      this.setCurrentMode(ProxyMode.Direct);
+      this.selectProfile(null);
+      this.syncProxy();
+      return;
+    }
+
+    if (!looseEqual(toJS(current), toJS(selected))) {
+      this.setSelectedProfile(toJS(current));
+      this.syncProxy();
+    }
+  }
+
   @action
   setProfiles(profiles: Profile[]) {
     this.profiles = profiles;
     localStorage.setItem(PROFILES, JSON.stringify(profiles));
+    this.reconcileSelection();
   }
 
   @action
@@ -75,6 +118,7 @@ export class ProfilesStore {
   removeProfile(profile: Profile) {
     this.profiles = this.profiles.filter(p => p.id !== profile.id);
     localStorage.setItem(PROFILES, JSON.stringify(this.profiles));
+    this.reconcileSelection();
   }
 
   @action
@@ -83,10 +127,10 @@ export class ProfilesStore {
     if (index !== -1) {
       this.profiles[index] = profile;
       localStorage.setItem(PROFILES, JSON.stringify(this.profiles));
+      this.reconcileSelection();
     }
   }
 
-  @action
   getProfileById(id: string) {
     return this.profiles.find(profile => profile.id === id);
   }
