@@ -13,7 +13,7 @@ import {
   Select
 } from '@/components';
 import { Edit } from '@/assets/icons';
-import { BYPASS_LIST, looseEqual } from '@/utils/misc';
+import { looseEqual } from '@/utils/misc';
 import { useStore, Profile } from '@options/stores';
 import styles from './profile.module.css';
 
@@ -136,9 +136,11 @@ const ProfileView = observer(() => {
   useEffect(() => {
     if (profile) {
       setCurrentProfile(profile);
-      // `??` rather than `||`: an empty bypass list is a deliberate choice and
-      // must not be silently swapped back to the defaults.
-      setBypassList((profile.bypassList ?? BYPASS_LIST).join('\n'));
+      // Show what is actually in effect. Falling back to BYPASS_LIST here would
+      // display entries the proxy does not have — the config builder turns a
+      // missing list into `[]`, not into the defaults. New profiles get the
+      // defaults written in when they are created, which is where they belong.
+      setBypassList((profile.bypassList ?? []).join('\n'));
     }
   }, [profile]);
 

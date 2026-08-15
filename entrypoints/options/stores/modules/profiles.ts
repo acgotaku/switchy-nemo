@@ -1,17 +1,11 @@
 import { action, computed, observable, runInAction, toJS } from 'mobx';
-import { looseEqual, namespace } from '@/utils/misc';
+import { looseEqual } from '@/utils/misc';
 import { setProxy } from '@/utils/proxy';
 import {
   profilesItem,
   proxyModeItem,
   selectedProfileItem
 } from '@/utils/storage';
-
-// Pre-0.1.0 kept everything in localStorage, which the background worker cannot
-// read. These keys only exist to move those installs over to browser.storage.
-export const PROFILES = `${namespace}.profiles`;
-export const SELECTED_PROFILE = `${namespace}.selectedProfile`;
-export const PROXY_MODE = `${namespace}.proxyMode`;
 
 export type Scheme = 'http' | 'https' | 'socks4' | 'socks5';
 export type ProxyRules =
@@ -42,59 +36,42 @@ export type Profile = {
   bypassList?: string[];
 };
 
-/**
- * Copies pre-0.1.0 settings out of localStorage. Self-clearing: the legacy keys
- * are dropped once they land in browser.storage, so this is a no-op afterwards.
- * On failure the legacy copy is left alone so the next load can retry.
- */
-async function migrateLegacyStorage() {
-  const legacyProfiles = localStorage.getItem(PROFILES);
-  const legacySelected = localStorage.getItem(SELECTED_PROFILE);
-  const legacyMode = localStorage.getItem(PROXY_MODE);
-  if (!legacyProfiles && !legacySelected && !legacyMode) return;
-
-  try {
-    await Promise.all([
-      legacyProfiles && profilesItem.setValue(JSON.parse(legacyProfiles)),
-      legacySelected &&
-        selectedProfileItem.setValue(JSON.parse(legacySelected)),
-      legacyMode && proxyModeItem.setValue(legacyMode as ProxyMode)
-    ]);
-  } catch (error) {
-    console.error('Error migrating settings from localStorage:', error);
-    return;
-  }
-
-  localStorage.removeItem(PROFILES);
-  localStorage.removeItem(SELECTED_PROFILE);
-  localStorage.removeItem(PROXY_MODE);
-}
-
 export class ProfilesStore {
   @observable accessor profiles: Profile[] = [];
   @observable accessor selectedProfile: Profile | null = null;
   @observable accessor currentMode: ProxyMode = ProxyMode.Direct;
 
+  // Until storage has been read the observables hold defaults, not the user's
+  // settings. Persisting those would write an empty list over real profiles, so
+  // nothing is saved before this flips.
+  private hydrated = false;
+
   /**
    * browser.storage is async, so the store starts empty and has to be filled in
    * before the first render. Entry points await this.
+   *
+   * Never rejects: a storage failure leaves the store unhydrated and read-only
+   * rather than taking the whole page down with it.
    */
   async hydrate() {
-    await migrateLegacyStorage();
+    try {
+      const [profiles, selectedProfile, currentMode] = await Promise.all([
+        profilesItem.getValue(),
+        selectedProfileItem.getValue(),
+        proxyModeItem.getValue()
+      ]);
 
-    const [profiles, selectedProfile, currentMode] = await Promise.all([
-      profilesItem.getValue(),
-      selectedProfileItem.getValue(),
-      proxyModeItem.getValue()
-    ]);
+      runInAction(() => {
+        this.profiles = profiles;
+        this.selectedProfile = selectedProfile;
+        this.currentMode = currentMode;
+      });
 
-    runInAction(() => {
-      this.profiles = profiles;
-      this.selectedProfile = selectedProfile;
-      this.currentMode = currentMode;
-    });
-
-    this.watchStorage();
+      this.watchStorage();
+      this.hydrated = true;
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
   }
 
   /**
@@ -131,14 +108,23 @@ export class ProfilesStore {
   }
 
   private persistProfiles() {
+    if (!this.hydrated) return;
     profilesItem.setValue(toJS(this.profiles)).catch(error => {
       console.error('Error saving profiles:', error);
     });
   }
 
   private persistSelectedProfile() {
+    if (!this.hydrated) return;
     selectedProfileItem.setValue(toJS(this.selectedProfile)).catch(error => {
       console.error('Error saving the selected profile:', error);
+    });
+  }
+
+  private persistCurrentMode() {
+    if (!this.hydrated) return;
+    proxyModeItem.setValue(this.currentMode).catch(error => {
+      console.error('Error saving the proxy mode:', error);
     });
   }
 
@@ -150,6 +136,7 @@ export class ProfilesStore {
    * password to take effect.
    */
   private syncProxy() {
+    if (!this.hydrated) return;
     const profile =
       this.currentMode === ProxyMode.FixedServers
         ? toJS(this.selectedProfile)
@@ -193,9 +180,7 @@ export class ProfilesStore {
   @action
   setCurrentMode(mode: ProxyMode) {
     this.currentMode = mode;
-    proxyModeItem.setValue(mode).catch(error => {
-      console.error('Error saving the proxy mode:', error);
-    });
+    this.persistCurrentMode();
   }
 
   @action
