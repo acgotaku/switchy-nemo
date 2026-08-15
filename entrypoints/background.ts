@@ -2,10 +2,8 @@ import type { Profile, ProxyMode } from '@options/stores/modules/profiles';
 import { MessageType, type Message } from '@/utils/proxy';
 import {
   hasStoredProxyMode,
-  proxyAuthItem,
   proxyModeItem,
-  selectedProfileItem,
-  type ProxyAuth
+  selectedProfileItem
 } from '@/utils/storage';
 
 type Config = {
@@ -18,6 +16,11 @@ type Config = {
     };
     bypassList?: string[];
   };
+};
+
+type ProxyAuth = {
+  username: string;
+  password: string;
 };
 
 // A profile only describes servers for fixed_servers; every other mode has to
@@ -43,19 +46,24 @@ function buildConfig(mode: ProxyMode, profile: Profile | null): Config {
   return config;
 }
 
-// The service worker is torn down while the proxy stays active, so credentials
-// cannot live in a closure variable — they have to be re-readable on wake-up.
+/**
+ * Credentials are read back out of the stored selection rather than kept in a
+ * copy of their own. The service worker is torn down while the proxy stays
+ * active, so they have to come from storage either way — and a second copy can
+ * only drift from the profile it was taken from.
+ */
 async function readProxyAuth(): Promise<ProxyAuth | null> {
-  const auth = await proxyAuthItem.getValue();
-  return auth?.username ? auth : null;
-}
+  const [mode, profile] = await Promise.all([
+    proxyModeItem.getValue(),
+    selectedProfileItem.getValue()
+  ]);
 
-function writeProxyAuth(profile: Profile | null) {
-  const username = profile?.username ?? '';
-  const password = profile?.password ?? '';
+  const activeProfile = resolveProfile(mode, profile);
+  const username = activeProfile?.username ?? '';
+
   return username
-    ? proxyAuthItem.setValue({ username, password })
-    : proxyAuthItem.removeValue();
+    ? { username, password: activeProfile?.password ?? '' }
+    : null;
 }
 
 // Chrome re-fires onAuthRequired for the same requestId when the credentials it
@@ -76,17 +84,13 @@ function pruneAttempts(now: number) {
 async function applyProxy(mode: ProxyMode, profile: Profile | null) {
   const activeProfile = resolveProfile(mode, profile);
 
-  await Promise.all([
-    browser.proxy.settings.set({ value: buildConfig(mode, activeProfile) }),
-    writeProxyAuth(activeProfile)
-  ]);
+  await browser.proxy.settings.set({ value: buildConfig(mode, activeProfile) });
 
   attemptedRequests.clear();
 }
 
 /**
- * Re-asserts the stored proxy on browser start and on update. Credentials are
- * already in storage, so only the settings need replaying.
+ * Re-asserts the stored proxy on browser start and on update.
  */
 async function restoreProxy() {
   // A fresh install has nothing to say about the proxy yet, and calling set()
@@ -98,12 +102,11 @@ async function restoreProxy() {
     proxyModeItem.getValue(),
     selectedProfileItem.getValue()
   ]);
-  const activeProfile = resolveProfile(mode, profile);
 
   // fixed_servers without a profile has no rules to apply and would be rejected.
-  if (mode === 'fixed_servers' && !activeProfile) return;
+  if (mode === 'fixed_servers' && !profile) return;
 
-  await browser.proxy.settings.set({ value: buildConfig(mode, activeProfile) });
+  await applyProxy(mode, profile);
 }
 
 export default defineBackground(() => {
@@ -112,6 +115,7 @@ export default defineBackground(() => {
       console.error('Error restoring proxy:', error);
     });
   };
+
   browser.runtime.onStartup.addListener(restore);
   browser.runtime.onInstalled.addListener(restore);
 

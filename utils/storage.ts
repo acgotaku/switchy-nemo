@@ -1,18 +1,12 @@
 import { storage } from '#imports';
 import type { Profile, ProxyMode } from '@options/stores/modules/profiles';
 
-export type ProxyAuth = {
-  username: string;
-  password: string;
-};
-
 // `local:` maps onto browser.storage.local, which is the one storage area both
 // the extension pages and the background worker can reach. Keeping every piece
 // of shared state here is what lets the worker rebuild the proxy on its own.
 export const PROFILES_KEY = 'local:profiles';
 export const SELECTED_PROFILE_KEY = 'local:selectedProfile';
 export const PROXY_MODE_KEY = 'local:proxyMode';
-export const PROXY_AUTH_KEY = 'local:proxyAuth';
 
 export const profilesItem = storage.defineItem<Profile[]>(PROFILES_KEY, {
   fallback: []
@@ -26,11 +20,6 @@ export const selectedProfileItem = storage.defineItem<Profile | null>(
 export const proxyModeItem = storage.defineItem<ProxyMode>(PROXY_MODE_KEY, {
   fallback: 'direct'
 });
-
-export const proxyAuthItem = storage.defineItem<ProxyAuth | null>(
-  PROXY_AUTH_KEY,
-  { fallback: null }
-);
 
 /**
  * Whether a proxy mode has ever been written. `proxyModeItem.getValue()` cannot
