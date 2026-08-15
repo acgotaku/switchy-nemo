@@ -1,5 +1,12 @@
 import type { Profile, ProxyMode } from '@options/stores/modules/profiles';
 import { MessageType, type Message } from '@/utils/proxy';
+import {
+  hasStoredProxyMode,
+  proxyAuthItem,
+  proxyModeItem,
+  selectedProfileItem,
+  type ProxyAuth
+} from '@/utils/storage';
 
 type Config = {
   mode: ProxyMode;
@@ -13,18 +20,33 @@ type Config = {
   };
 };
 
-type ProxyAuth = {
-  username: string;
-  password: string;
-};
+// A profile only describes servers for fixed_servers; every other mode has to
+// drop it so stale rules and credentials are not carried over.
+function resolveProfile(mode: ProxyMode, profile: Profile | null) {
+  return mode === 'fixed_servers' ? profile : null;
+}
 
-export const PROXY_AUTH_KEY = 'proxyAuth';
+function buildConfig(mode: ProxyMode, profile: Profile | null): Config {
+  const config: Config = { mode };
+
+  if (profile) {
+    config.rules = {
+      singleProxy: {
+        scheme: profile.scheme || 'http',
+        host: profile.host,
+        port: profile.port || 80
+      },
+      bypassList: profile.bypassList || []
+    };
+  }
+
+  return config;
+}
 
 // The service worker is torn down while the proxy stays active, so credentials
 // cannot live in a closure variable — they have to be re-readable on wake-up.
 async function readProxyAuth(): Promise<ProxyAuth | null> {
-  const stored = await browser.storage.local.get(PROXY_AUTH_KEY);
-  const auth = stored[PROXY_AUTH_KEY] as ProxyAuth | undefined;
+  const auth = await proxyAuthItem.getValue();
   return auth?.username ? auth : null;
 }
 
@@ -32,8 +54,8 @@ function writeProxyAuth(profile: Profile | null) {
   const username = profile?.username ?? '';
   const password = profile?.password ?? '';
   return username
-    ? browser.storage.local.set({ [PROXY_AUTH_KEY]: { username, password } })
-    : browser.storage.local.remove(PROXY_AUTH_KEY);
+    ? proxyAuthItem.setValue({ username, password })
+    : proxyAuthItem.removeValue();
 }
 
 // Chrome re-fires onAuthRequired for the same requestId when the credentials it
@@ -51,57 +73,63 @@ function pruneAttempts(now: number) {
   }
 }
 
+async function applyProxy(mode: ProxyMode, profile: Profile | null) {
+  const activeProfile = resolveProfile(mode, profile);
+
+  await Promise.all([
+    browser.proxy.settings.set({ value: buildConfig(mode, activeProfile) }),
+    writeProxyAuth(activeProfile)
+  ]);
+
+  attemptedRequests.clear();
+}
+
+/**
+ * Re-asserts the stored proxy on browser start and on update. Credentials are
+ * already in storage, so only the settings need replaying.
+ */
+async function restoreProxy() {
+  // A fresh install has nothing to say about the proxy yet, and calling set()
+  // anyway would hand the extension control of the browser's proxy settings
+  // before the user has picked anything.
+  if (!(await hasStoredProxyMode())) return;
+
+  const [mode, profile] = await Promise.all([
+    proxyModeItem.getValue(),
+    selectedProfileItem.getValue()
+  ]);
+  const activeProfile = resolveProfile(mode, profile);
+
+  // fixed_servers without a profile has no rules to apply and would be rejected.
+  if (mode === 'fixed_servers' && !activeProfile) return;
+
+  await browser.proxy.settings.set({ value: buildConfig(mode, activeProfile) });
+}
+
 export default defineBackground(() => {
+  const restore = () => {
+    restoreProxy().catch(error => {
+      console.error('Error restoring proxy:', error);
+    });
+  };
+  browser.runtime.onStartup.addListener(restore);
+  browser.runtime.onInstalled.addListener(restore);
+
   browser.runtime.onMessage.addListener(
     (message: Message, sender, sendResponse) => {
       switch (message.type) {
-        case MessageType.SaveProfile: {
-          const { profiles, currentMode, selectedProfile } = message;
-          browser.storage.local
-            .set({
-              profiles: profiles || [],
-              currentMode: currentMode || 'direct',
-              selectedProfile: selectedProfile || null
-            })
-            .then(() => {
-              sendResponse({ success: true });
-            });
-          // Indicates that the response will be sent asynchronously
-          return true;
-        }
         case MessageType.SetProxy: {
           const { currentMode, selectedProfile } = message;
-          const mode = currentMode || 'direct';
-          // A profile only applies in fixed_servers mode; anything else has to
-          // drop the stored credentials so they are not offered afterwards.
-          const activeProfile =
-            mode === 'fixed_servers' ? (selectedProfile ?? null) : null;
 
-          const config: Config = { mode };
-
-          if (activeProfile) {
-            config.rules = {
-              singleProxy: {
-                scheme: activeProfile.scheme || 'http',
-                host: activeProfile.host,
-                port: activeProfile.port || 80
-              },
-              bypassList: activeProfile.bypassList || []
-            };
-          }
-
-          Promise.all([
-            browser.proxy.settings.set({ value: config }),
-            writeProxyAuth(activeProfile)
-          ])
+          applyProxy(currentMode || 'direct', selectedProfile ?? null)
             .then(() => {
-              attemptedRequests.clear();
               sendResponse({ success: true });
             })
             .catch(error => {
               console.error('Error setting proxy:', error);
               sendResponse({ success: false, error: error.message });
             });
+          // Indicates that the response will be sent asynchronously
           return true;
         }
       }
