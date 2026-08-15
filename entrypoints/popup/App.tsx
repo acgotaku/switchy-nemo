@@ -40,19 +40,30 @@ const App = observer(() => {
   }, [t]);
 
   const applyProxy = useCallback((mode: ProxyMode, profile: Profile | null) => {
-    setProxy(mode, profile).then(response => {
-      if (response?.success) {
-        browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-          if (tabs.length > 0) {
-            const tabId = tabs[0].id;
-            if (tabId) {
-              browser.tabs.reload(tabId);
-            }
-          }
-        });
-        window.close();
-      }
-    });
+    setProxy(mode, profile)
+      .then(response => {
+        if (response?.success) {
+          browser.tabs
+            .query({ active: true, currentWindow: true })
+            .then(tabs => {
+              if (tabs.length > 0) {
+                const tabId = tabs[0].id;
+                if (tabId) {
+                  browser.tabs.reload(tabId);
+                }
+              }
+            })
+            .catch(error => {
+              console.error('Error reloading the active tab:', error);
+            });
+          window.close();
+        }
+      })
+      .catch(error => {
+        // The popup is gone once it closes, so an unhandled rejection here
+        // would leave a silently dead click with nothing to inspect.
+        console.error('Error applying proxy:', error);
+      });
   }, []);
 
   const selectMode = useCallback(
